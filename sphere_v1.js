@@ -1,3 +1,18 @@
+// sphere_v1.js
+// Working model of the sphere - v1
+//
+// Functionality - Done
+// - Rotation
+// - Depth
+// - Highlight
+// - Inertia
+//
+// Functionality - To Implement
+// - Config Class
+// - Gravity
+// - Geo JSON
+
+
 class Vector3 {
     constructor(x, y, z) {
         this.x = x;
@@ -216,7 +231,7 @@ class InputHandler {
             this.previousMousePosition = { x: event.clientX, y: event.clientY };
             this.lastTimestamp = event.timeStamp;
         });
-    
+
         canvas.addEventListener('mousemove', (event) => {
             if (this.isDragging) {
                 const deltaX = event.clientX - this.previousMousePosition.x;
@@ -230,15 +245,15 @@ class InputHandler {
                 this.highlightCell(event.clientX, event.clientY);
             }
         });
-    
+
         canvas.addEventListener('mouseup', () => {
             this.isDragging = false;
         });
-    
+
         canvas.addEventListener('mouseleave', () => {
             this.isDragging = false;
         });
-    
+
         canvas.addEventListener('wheel', (event) => {
             const zoomSpeed = 0.1;
             const zoomFactor = event.deltaY * zoomSpeed;
@@ -250,52 +265,39 @@ class InputHandler {
         const rect = this.canvas.getBoundingClientRect();
         const scaleX = this.canvas.width / rect.width;
         const scaleY = this.canvas.height / rect.height;
-    
+
         // Transform mouse coordinates to canvas coordinates
         const canvasX = (mouseX - rect.left) * scaleX;
         const canvasY = (mouseY - rect.top) * scaleY;
-    
+
         // Center the coordinates
         const x = canvasX - this.canvas.width / 2;
         const y = canvasY - this.canvas.height / 2;
-    
+
         let closestDistance = Infinity;
         let closestCell = null;
-    
+
         for (let i = 0; i < this.sphere.latLines; i++) {
             for (let j = 0; j < this.sphere.lonLines; j++) {
                 const index1 = i * (this.sphere.lonLines + 1) + j;
                 const index2 = i * (this.sphere.lonLines + 1) + (j + 1) % (this.sphere.lonLines + 1);
                 const index3 = (i + 1) * (this.sphere.lonLines + 1) + (j + 1) % (this.sphere.lonLines + 1);
                 const index4 = (i + 1) * (this.sphere.lonLines + 1) + j;
-    
+
                 const projected1 = this.app.camera.project(this.sphere.vertices[index1]);
                 const projected2 = this.app.camera.project(this.sphere.vertices[index2]);
                 const projected3 = this.app.camera.project(this.sphere.vertices[index3]);
                 const projected4 = this.app.camera.project(this.sphere.vertices[index4]);
-    
+
                 if (!projected1 || !projected2 || !projected3 || !projected4) continue;
-    
-                // Calculate the normal of the cell
-                const v1 = this.sphere.vertices[index2].subtract(this.sphere.vertices[index1]);
-                const v2 = this.sphere.vertices[index4].subtract(this.sphere.vertices[index1]);
-                const normal = v1.cross(v2).normalize();
-    
-                // Camera's view direction (assuming looking down the negative z-axis)
-                const cameraViewDirection = new Vector3(0, 0, -1);
-    
-                // Dot product between the normal and the camera's view direction
-                const dotProduct = normal.dot(cameraViewDirection);
-    
-                // Debug logging for normal and dot product
-                console.log(`Cell (${i}, ${j}) normal:`, normal, `dotProduct:`, dotProduct);
-    
+
                 // Ensure all projected points are in front of the camera and the cell is facing the camera
-                if (projected1.z >= 0 && projected2.z >= 0 && projected3.z >= 0 && projected4.z >= 0 && dotProduct < 0) {
+                if (projected1.z <= 0 && projected2.z <= 0 && projected3.z <= 0 && projected4.z <= 0) {
                     const centerX = (projected1.x + projected2.x + projected3.x + projected4.x) / 4;
                     const centerY = (projected1.y + projected2.y + projected3.y + projected4.y) / 4;
                     const distance = Math.sqrt(Math.pow(centerX - x, 2) + Math.pow(centerY - y, 2));
-    
+
+                    // Only consider cells on the near side for highlighting
                     if (distance < closestDistance) {
                         closestDistance = distance;
                         closestCell = { i, j };
@@ -303,7 +305,7 @@ class InputHandler {
                 }
             }
         }
-    
+
         this.highlightedCell = closestCell;
     }
 }
@@ -338,48 +340,8 @@ class SphereApp {
 
         const projectedVertices = this.sphere.vertices.map(vertex => this.camera.project(vertex)).filter(v => v !== null);
 
-        for (let i = 0; i <= this.sphere.latLines; i++) {
-            this.renderer.context.beginPath();
-            for (let j = 0; j <= this.sphere.lonLines; j++) {
-                const index = i * (this.sphere.lonLines + 1) + j;
-                const { x, y, z } = projectedVertices[index];
-                if (j === 0) this.renderer.context.moveTo(x, y);
-                else this.renderer.context.lineTo(x, y);
-
-                // Draw lines differently based on depth
-                if (z < 0) {
-                    this.renderer.context.strokeStyle = 'red';
-                } else {
-                    this.renderer.context.strokeStyle = 'rgba(0, 0, 0, 0.5)';
-                }
-                this.renderer.context.stroke();
-                this.renderer.context.beginPath();
-                this.renderer.context.moveTo(x, y);
-            }
-            this.renderer.context.stroke();
-        }
-
-        for (let j = 0; j <= this.sphere.lonLines; j++) {
-            this.renderer.context.beginPath();
-            for (let i = 0; i <= this.sphere.latLines; i++) {
-                const index = i * (this.sphere.lonLines + 1) + j;
-                const { x, y, z } = projectedVertices[index];
-                if (i === 0) this.renderer.context.moveTo(x, y);
-                else this.renderer.context.lineTo(x, y);
-
-                // Draw lines differently based on depth
-                if (z < 0) {
-                    this.renderer.context.strokeStyle = 'red';
-                } else {
-                    this.renderer.context.strokeStyle = 'rgba(0, 0, 0, 0.5)';
-                }
-                this.renderer.context.stroke();
-                this.renderer.context.beginPath();
-                this.renderer.context.moveTo(x, y);
-            }
-            this.renderer.context.stroke();
-        }
-
+        // Collect cells with their average z-depth and tag them
+        const cells = [];
         for (let i = 0; i < this.sphere.latLines; i++) {
             for (let j = 0; j < this.sphere.lonLines; j++) {
                 const index1 = i * (this.sphere.lonLines + 1) + j;
@@ -387,21 +349,45 @@ class SphereApp {
                 const index3 = (i + 1) * (this.sphere.lonLines + 1) + (j + 1) % (this.sphere.lonLines + 1);
                 const index4 = (i + 1) * (this.sphere.lonLines + 1) + j;
 
-                const { x: x1, y: y1, z: z1 } = projectedVertices[index1];
-                const { x: x2, y: y2, z: z2 } = projectedVertices[index2];
-                const { x: x3, y: y3, z: z3 } = projectedVertices[index3];
-                const { x: x4, y: y4, z: z4 } = projectedVertices[index4];
+                const v1 = projectedVertices[index1];
+                const v2 = projectedVertices[index2];
+                const v3 = projectedVertices[index3];
+                const v4 = projectedVertices[index4];
 
-                if (z1 >= 0 && z2 >= 0 && z3 >= 0 && z4 >= 0) {
-                    const avgZ = (z1 + z2 + z3 + z4) / 4;
-                    const distanceFromCamera = Math.sqrt(
-                        Math.pow(this.camera.position.x - (x1 + x2 + x3 + x4) / 4, 2) +
-                        Math.pow(this.camera.position.y - (y1 + y2 + y3 + y4) / 4, 2) +
-                        Math.pow(this.camera.position.z - avgZ, 2)
-                    );
-                    const alpha = Math.max(0, Math.min(1, 1 - distanceFromCamera / this.camera.position.z));
-                    this.renderer.drawCell(x1, y1, x2, y2, x3, y3, x4, y4, { r: 255, g: 255, b: 0 }, alpha);
-                }
+                const avgZ = (v1.z + v2.z + v3.z + v4.z) / 4;
+                const isFarSide = avgZ > 0;
+
+                cells.push({ v1, v2, v3, v4, avgZ, isFarSide });
+            }
+        }
+
+        // Sort cells by their average z-depth (furthest first)
+        cells.sort((a, b) => b.avgZ - a.avgZ);
+
+        // Draw cells and lines
+        for (const cell of cells) {
+            const { v1, v2, v3, v4, isFarSide } = cell;
+
+            if (isFarSide) {
+                this.renderer.drawLine(v1.x, v1.y, v2.x, v2.y, '#778da9');
+                this.renderer.drawLine(v2.x, v2.y, v3.x, v3.y, '#778da9');
+                this.renderer.drawLine(v3.x, v3.y, v4.x, v4.y, '#778da9');
+                this.renderer.drawLine(v4.x, v4.y, v1.x, v1.y, '#778da9');
+            } else {
+                this.renderer.drawLine(v1.x, v1.y, v2.x, v2.y, '#e0e1dd');
+                this.renderer.drawLine(v2.x, v2.y, v3.x, v3.y, '#e0e1dd');
+                this.renderer.drawLine(v3.x, v3.y, v4.x, v4.y, '#e0e1dd');
+                this.renderer.drawLine(v4.x, v4.y, v1.x, v1.y, '#e0e1dd');
+            }
+
+            if (v1.z <= 0 && v2.z <= 0 && v3.z <= 0 && v4.z <= 0) {
+                const distanceFromCamera = Math.sqrt(
+                    Math.pow(this.camera.position.x - (v1.x + v2.x + v3.x + v4.x) / 4, 2) +
+                    Math.pow(this.camera.position.y - (v1.y + v2.y + v3.y + v4.y) / 4, 2) +
+                    Math.pow(this.camera.position.z - cell.avgZ, 2)
+                );
+                const alpha = Math.max(0, Math.min(1, 1 - distanceFromCamera / this.camera.position.z));
+                this.renderer.drawCell(v1.x, v1.y, v2.x, v2.y, v3.x, v3.y, v4.x, v4.y, { r: 255, g: 255, b: 0 }, alpha);
             }
         }
 
@@ -415,7 +401,7 @@ class SphereApp {
             const { x: x2, y: y2, z: z2 } = projectedVertices[index2];
             const { x: x3, y: y3, z: z3 } = projectedVertices[index3];
             const { x: x4, y: y4, z: z4 } = projectedVertices[index4];
-            if (z1 >= 0 && z2 >= 0 && z3 >= 0 && z4 >= 0) {
+            if (z1 <= 0 && z2 <= 0 && z3 <= 0 && z4 <= 0) {
                 this.renderer.drawCell(x1, y1, x2, y2, x3, y3, x4, y4, { r: 255, g: 255, b: 0 }, 0.3);
             }
         }

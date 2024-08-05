@@ -93,32 +93,28 @@ class Quaternion {
 
 class Camera {
     constructor() {
-        this.position = new Vector3(0, 0, 5);
-        this.rotation = new Quaternion(0, 0, 0, 1);
-        this.projectionScale = 1000;
-        this.fixedDistance = 5;
+        this.position = new Vector3(0, 0, 5); // Camera starts at (0, 0, 5)
+        this.rotation = new Quaternion(0, 0, 0, 1); // No initial rotation
+        this.projectionScale = 1000; // Projection scaling factor
+        this.fixedDistance = 5; // Distance offset to avoid division by zero
     }
 
     rotate(deltaX, deltaY) {
-        const rotationSpeed = 0.005;
+        const rotationSpeed = 0.005; // Rotation speed factor
         const rotationY = Quaternion.fromAxisAngle(Vector3.up(), -deltaX * rotationSpeed);
         const rotationX = Quaternion.fromAxisAngle(Vector3.right(), deltaY * rotationSpeed);
         this.rotation = rotationY.multiply(this.rotation).multiply(rotationX).normalize();
     }
 
     project(vertex) {
+        // Subtract the camera position from the vertex and rotate the result
         const rotated = this.rotateVector(vertex.subtract(this.position), this.rotation);
         const fixedDistance = 5;
         const scale = this.projectionScale / (this.projectionScale + rotated.z + fixedDistance);
 
-        // If the vertex is behind the camera, set z to a small positive value
-        const z = rotated.z < 0 ? 0.01 : rotated.z;
-
         const x = rotated.x * scale;
         const y = rotated.y * scale;
-
-        // Debug logging for projection
-        console.log(`Projecting vertex:`, vertex, `Rotated:`, rotated, `Projected:`, new Vector3(x, y, z));
+        const z = rotated.z; // Keep the original z for depth sorting
 
         return new Vector3(x, y, z);
     }
@@ -141,13 +137,19 @@ class Sphere {
 
     createVertices() {
         this.vertices = [];
+        // Loop through latitude lines
         for (let i = 0; i <= this.latLines; i++) {
+            // Calculate the latitude angle (from -π/2 to π/2)
             const lat = (Math.PI / this.latLines) * i - Math.PI / 2;
+            // Loop through longitude lines
             for (let j = 0; j <= this.lonLines; j++) {
+                // Calculate the longitude angle (from 0 to 2π)
                 const lon = (2 * Math.PI / this.lonLines) * j;
+                // Convert spherical coordinates to Cartesian coordinates
                 const x = this.radius * Math.cos(lat) * Math.cos(lon);
                 const y = this.radius * Math.sin(lat);
                 const z = this.radius * Math.cos(lat) * Math.sin(lon);
+                // Add the vertex to the vertices array
                 this.vertices.push(new Vector3(x, y, z));
             }
         }
@@ -207,13 +209,14 @@ class InputHandler {
         this.previousMousePosition = { x: 0, y: 0 };
         this.velocity = new Vector3(0, 0, 0);
         this.lastTimestamp = 0;
+        this.frameCounter = 0; // Add a frame counter
 
         canvas.addEventListener('mousedown', (event) => {
             this.isDragging = true;
             this.previousMousePosition = { x: event.clientX, y: event.clientY };
             this.lastTimestamp = event.timeStamp;
         });
-
+    
         canvas.addEventListener('mousemove', (event) => {
             if (this.isDragging) {
                 const deltaX = event.clientX - this.previousMousePosition.x;
@@ -227,15 +230,15 @@ class InputHandler {
                 this.highlightCell(event.clientX, event.clientY);
             }
         });
-
+    
         canvas.addEventListener('mouseup', () => {
             this.isDragging = false;
         });
-
+    
         canvas.addEventListener('mouseleave', () => {
             this.isDragging = false;
         });
-
+    
         canvas.addEventListener('wheel', (event) => {
             const zoomSpeed = 0.1;
             const zoomFactor = event.deltaY * zoomSpeed;
@@ -247,36 +250,52 @@ class InputHandler {
         const rect = this.canvas.getBoundingClientRect();
         const scaleX = this.canvas.width / rect.width;
         const scaleY = this.canvas.height / rect.height;
-
+    
         // Transform mouse coordinates to canvas coordinates
         const canvasX = (mouseX - rect.left) * scaleX;
         const canvasY = (mouseY - rect.top) * scaleY;
-
+    
         // Center the coordinates
         const x = canvasX - this.canvas.width / 2;
         const y = canvasY - this.canvas.height / 2;
-
+    
         let closestDistance = Infinity;
         let closestCell = null;
-
+    
         for (let i = 0; i < this.sphere.latLines; i++) {
             for (let j = 0; j < this.sphere.lonLines; j++) {
                 const index1 = i * (this.sphere.lonLines + 1) + j;
                 const index2 = i * (this.sphere.lonLines + 1) + (j + 1) % (this.sphere.lonLines + 1);
                 const index3 = (i + 1) * (this.sphere.lonLines + 1) + (j + 1) % (this.sphere.lonLines + 1);
                 const index4 = (i + 1) * (this.sphere.lonLines + 1) + j;
-
+    
                 const projected1 = this.app.camera.project(this.sphere.vertices[index1]);
                 const projected2 = this.app.camera.project(this.sphere.vertices[index2]);
                 const projected3 = this.app.camera.project(this.sphere.vertices[index3]);
                 const projected4 = this.app.camera.project(this.sphere.vertices[index4]);
-
-                // Ensure all projected points are in front of the camera
-                if (projected1.z >= 0 && projected2.z >= 0 && projected3.z >= 0 && projected4.z >= 0) {
+    
+                if (!projected1 || !projected2 || !projected3 || !projected4) continue;
+    
+                // Calculate the normal of the cell
+                const v1 = this.sphere.vertices[index2].subtract(this.sphere.vertices[index1]);
+                const v2 = this.sphere.vertices[index4].subtract(this.sphere.vertices[index1]);
+                const normal = v1.cross(v2).normalize();
+    
+                // Camera's view direction (assuming looking down the negative z-axis)
+                const cameraViewDirection = new Vector3(0, 0, -1);
+    
+                // Dot product between the normal and the camera's view direction
+                const dotProduct = normal.dot(cameraViewDirection);
+    
+                // Debug logging for normal and dot product
+                console.log(`Cell (${i}, ${j}) normal:`, normal, `dotProduct:`, dotProduct);
+    
+                // Ensure all projected points are in front of the camera and the cell is facing the camera
+                if (projected1.z >= 0 && projected2.z >= 0 && projected3.z >= 0 && projected4.z >= 0 && dotProduct < 0) {
                     const centerX = (projected1.x + projected2.x + projected3.x + projected4.x) / 4;
                     const centerY = (projected1.y + projected2.y + projected3.y + projected4.y) / 4;
                     const distance = Math.sqrt(Math.pow(centerX - x, 2) + Math.pow(centerY - y, 2));
-
+    
                     if (distance < closestDistance) {
                         closestDistance = distance;
                         closestCell = { i, j };
@@ -284,7 +303,7 @@ class InputHandler {
                 }
             }
         }
-
+    
         this.highlightedCell = closestCell;
     }
 }
@@ -317,17 +336,26 @@ class SphereApp {
         this.renderer.save();
         this.renderer.translate(this.canvas.width / 2, this.canvas.height / 2);
 
-        const projectedVertices = this.sphere.vertices.map(vertex => this.camera.project(vertex));
+        const projectedVertices = this.sphere.vertices.map(vertex => this.camera.project(vertex)).filter(v => v !== null);
 
         for (let i = 0; i <= this.sphere.latLines; i++) {
             this.renderer.context.beginPath();
             for (let j = 0; j <= this.sphere.lonLines; j++) {
                 const index = i * (this.sphere.lonLines + 1) + j;
-                const { x, y } = projectedVertices[index];
+                const { x, y, z } = projectedVertices[index];
                 if (j === 0) this.renderer.context.moveTo(x, y);
                 else this.renderer.context.lineTo(x, y);
+
+                // Draw lines differently based on depth
+                if (z < 0) {
+                    this.renderer.context.strokeStyle = 'red';
+                } else {
+                    this.renderer.context.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+                }
+                this.renderer.context.stroke();
+                this.renderer.context.beginPath();
+                this.renderer.context.moveTo(x, y);
             }
-            this.renderer.context.strokeStyle = 'rgba(0, 0, 0, 0.5)';
             this.renderer.context.stroke();
         }
 
@@ -335,11 +363,20 @@ class SphereApp {
             this.renderer.context.beginPath();
             for (let i = 0; i <= this.sphere.latLines; i++) {
                 const index = i * (this.sphere.lonLines + 1) + j;
-                const { x, y } = projectedVertices[index];
+                const { x, y, z } = projectedVertices[index];
                 if (i === 0) this.renderer.context.moveTo(x, y);
                 else this.renderer.context.lineTo(x, y);
+
+                // Draw lines differently based on depth
+                if (z < 0) {
+                    this.renderer.context.strokeStyle = 'red';
+                } else {
+                    this.renderer.context.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+                }
+                this.renderer.context.stroke();
+                this.renderer.context.beginPath();
+                this.renderer.context.moveTo(x, y);
             }
-            this.renderer.context.strokeStyle = 'rgba(0, 0, 0, 0.5)';
             this.renderer.context.stroke();
         }
 
